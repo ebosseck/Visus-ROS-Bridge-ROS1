@@ -7,6 +7,7 @@ from rospy import Publisher, Subscriber, ROSException
 
 from pytidenetworking.connection import Connection
 from pytidenetworking.message import Message
+from pytidenetworking import message as Msg
 from pytidenetworking.peer import DisconnectReason, DISCONNECT_REASON_STR
 from pytidenetworking.server import Server
 from pytidenetworking.threading.fixedupdatethreads import FixedUpdateThread
@@ -21,6 +22,8 @@ from rosgraph_msgs.msg import Log as ROSLogMessage
 class ROSServer:
 
     def __init__(self, port, maxClients: int = 10):
+        Msg.maxPayloadSize = 63 * 1024 # 63 Kb
+
         self.tcpTransport = TCPServer()
         self.server: Server = Server(self.tcpTransport)
         self.server.start(port, maxClients)
@@ -104,6 +107,7 @@ class ROSServer:
         self.server.registerMessageHandler(ClientToServer.ROS_MESSAGE, self.onROSMessage)
         self.server.registerMessageHandler(ClientToServer.SERVICE_CALL, self.onCallService)
         self.server.registerMessageHandler(ClientToServer.SERVICE_RESPONSE, self.onServiceResponse)
+
 
     def onLog(self, connectionID: int, message: Message):
 
@@ -230,7 +234,8 @@ class ROSServer:
 
         msg = roslibmsg.get_message_class(type)()
         deserialize(message, value=msg)
-        self.publishers[topic].publish(msg)
+        if topic in self.publishers:
+            self.publishers[topic].publish(msg)
 
     def onCallService(self, connectionID: int, message: Message):
         pass # TODO: Handle by calling service and sending the response

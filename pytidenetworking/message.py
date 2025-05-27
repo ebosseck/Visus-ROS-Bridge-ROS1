@@ -1134,13 +1134,13 @@ class Message(MessageBase):
         self.readPos = self.readPos if pos < 0 else pos
 
         self.checkReadAvailable(self.readPos, 1)
-        firstByte = self.getInt8(self.readPos)
+        firstByte = self.getUInt8(self.readPos)
 
         if (firstByte & 0b1000_0000) == 0:
             return firstByte
 
         self.checkReadAvailable(self.readPos, 1)
-        return ((firstByte << 8) | self.getInt8(self.readPos)) & 0b0111_1111_1111_1111
+        return ((firstByte << 8) | self.getUInt8(self.readPos)) & 0b0111_1111_1111_1111
 
     #endregion
 

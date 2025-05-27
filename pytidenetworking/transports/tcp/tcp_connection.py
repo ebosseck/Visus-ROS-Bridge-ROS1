@@ -97,6 +97,8 @@ class TCPConnection(Connection):
                             break # No new bytes received
 
                     self.nextMessageSize = int.from_bytes(self.sizeBytes, self.byte_order, signed=False)
+                    logger.debug("Expecting to receive {} bytes".format(self.nextMessageSize))
+
                     if self.nextMessageSize > 0:
                         tryReceiveMore, byteCount = self.tryReceiveMessage()
 
@@ -125,6 +127,8 @@ class TCPConnection(Connection):
                 logger.error("Unhandled TCP Exception: {}".format(ex))
 
             if byteCount > 0:
+                logger.debug("Received {} bytes".format(byteCount))
+
                 self.__tcpPeer.receiveBuffer = self.messageBytes
                 self.__tcpPeer.onDataReceived(byteCount, self)
                 self.messageBytes = bytes()

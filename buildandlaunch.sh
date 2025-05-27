@@ -6,4 +6,4 @@ catkin_make
 
 source devel/setup.bash
 
-roslaunch visus_tcp_bridge bridge.launch
+roslaunch visus_ros_bridge bridge.launch

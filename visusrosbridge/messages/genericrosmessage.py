@@ -6,6 +6,7 @@ from visusrosbridge.ros.tools import getMessageDefinition
 
 import rospy
 import std_msgs.msg
+import genpy
 
 #region Code Generation
 
@@ -45,7 +46,7 @@ VALUE_SERIALIZE_PRIMITIVE_ARRAY = "msg.{}Array(value.{})"
 VALUE_SERIALIZE_ARRAY_LENGTH = "msg.putArrayLength(len({}))"
 VALUE_SERIALIZE_COMPLEX = "exec(SERIALIZERS['{}'], {{'SERIALIZERS': SERIALIZERS, 'msg': msg, 'value': value.{} }})"
 
-VALUE_SERIALIZE_COMPLEX_ARRAY = "for j in range(len(value.{0})):\n    exec(SERIALIZERS['{1}'], __globals={{'SERIALIZERS': SERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
+VALUE_SERIALIZE_COMPLEX_ARRAY = "for j in range(len(value.{0})):\n    exec(SERIALIZERS['{1}'], {{'SERIALIZERS': SERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
 
 
 def generateSerializer(msg):
@@ -133,11 +134,37 @@ DESERIALIZERS: Dict[str, Any] = {}
 VALUE_DESERIALIZE_PRIMITIVE_SINGLE = "value.{1} = msg.{0}()"
 VALUE_DESERIALIZE_PRIMITIVE_ARRAY = "value.{1} = msg.{0}Array()"
 
-VALUE_DESERIALIZE_ARRAY_LENGTH = "lenght = msg.readArrayLength()"
+VALUE_DESERIALIZE_ARRAY_LENGTH = "length = msg.readArrayLength()"
 VALUE_DESERIALIZE_COMPLEX = "exec(DESERIALIZERS['{0}'], {{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{1} }})"
 
-VALUE_DESERIALIZE_COMPLEX_ARRAY = "for j in range(length):\n    exec(DESERIALIZERS['{1}'], __globals={{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
+VALUE_DESERIALIZE_COMPLEX_ARRAY = "value.{0} = [{2}] * length\nfor j in range(length):\n    exec(DESERIALIZERS['{1}'], {{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
 
+
+def findInstanceOf(msg, slot, msgTypeStr):
+    obj = getattr(msg, slot)
+
+    if isinstance(obj, genpy.Message):
+        return obj
+
+    if type(obj) is list and len(obj) > 0:
+        return obj[0]
+
+    available_messages = genpy.Message.__subclasses__()
+
+    for cls in available_messages:
+        instance = cls()
+        if instance._type == msgTypeStr:
+            return instance
+
+    print("Unable to get instance of message type: {}".format(msgTypeStr))
+
+    return None
+
+def importRootOf(obj):
+    return "import {}".format(obj.__module__.split('.')[0])
+
+def constructorOf(obj):
+    return "{}.{}()".format(obj.__module__, type(obj).__qualname__)
 
 def generateDeserializer(msg):
     msg_type = msg._type
@@ -147,40 +174,43 @@ def generateDeserializer(msg):
     source = ["# " + msg_type]
 
     for i in range(len(types)):
-        type = types[i]
-        if type[0] in PRIMITIVE_DESERIALIZERS: # Type is in primitives
-            if type[1]: # isArray
-                if type[2] > 0: # fixedLength array
-                    for j in range(type[2]):
-                        source.append(VALUE_DESERIALIZE_PRIMITIVE_SINGLE.format(PRIMITIVE_DESERIALIZERS[type[0]],
+        typei = types[i]
+        if typei[0] in PRIMITIVE_DESERIALIZERS: # Type is in primitives
+            if typei[1]: # isArray
+                if typei[2] > 0: # fixedLength array
+                    for j in range(typei[2]):
+                        source.append(VALUE_DESERIALIZE_PRIMITIVE_SINGLE.format(PRIMITIVE_DESERIALIZERS[typei[0]],
                                                                               "{}[{}]".format(slots[i], j)))
                 else: # Dynamic Length Array
-                    source.append(VALUE_DESERIALIZE_PRIMITIVE_ARRAY.format(PRIMITIVE_DESERIALIZERS[type[0]], slots[i]))
+                    source.append(VALUE_DESERIALIZE_PRIMITIVE_ARRAY.format(PRIMITIVE_DESERIALIZERS[typei[0]], slots[i]))
             else:
-                source.append(VALUE_DESERIALIZE_PRIMITIVE_SINGLE.format(PRIMITIVE_DESERIALIZERS[type[0]], slots[i]))
-        elif type[0] in ROS_DESERIALIZERS:
-            if type[1]: # isArray
-                if type[2] > 0: # fixedLength array
-                    for j in range(type[2]):
-                        source.append(ROS_DESERIALIZERS[type[0]].format("{}[{}]".format(slots[i], j)))
+                source.append(VALUE_DESERIALIZE_PRIMITIVE_SINGLE.format(PRIMITIVE_DESERIALIZERS[typei[0]], slots[i]))
+        elif typei[0] in ROS_DESERIALIZERS:
+            if typei[1]: # isArray
+                if typei[2] > 0: # fixedLength array
+                    for j in range(typei[2]):
+                        source.append(ROS_DESERIALIZERS[typei[0]].format("{}[{}]".format(slots[i], j)))
                 else: # dynamic Length Array
                     source.append(VALUE_DESERIALIZE_ARRAY_LENGTH.format(slots[i]))
-                    source.append(ROS_DESERIALIZERS_ARRAY[type[0]].format(slots[i]))
+                    source.append(ROS_DESERIALIZERS_ARRAY[typei[0]].format(slots[i]))
             else: # Single Value
-                source.append(ROS_DESERIALIZERS[type[0]].format(type[0], slots[i]))
+                source.append(ROS_DESERIALIZERS[typei[0]].format(typei[0], slots[i]))
         else:
-            if getattr(msg, slots[i])._type not in DESERIALIZERS:
-                generateDeserializer(getattr(msg, slots[i]))
+            obj = findInstanceOf(msg, slots[i], typei[0])
 
-            if type[1]: # isArray
-                if type[2] > 0: # fixedLength array
-                    for j in range(type[2]):
-                        source.append(VALUE_DESERIALIZE_COMPLEX.format(type[0], "{}[{}]".format(slots[i], j)))
+            if obj._type not in DESERIALIZERS:
+                generateDeserializer(obj)
+
+            if typei[1]: # isArray
+                if typei[2] > 0: # fixedLength array
+                    for j in range(typei[2]):
+                        source.append(VALUE_DESERIALIZE_COMPLEX.format(typei[0], "{}[{}]".format(slots[i], j)))
                 else: # dynamic Length Array
+                    source.append(importRootOf(obj))
                     source.append(VALUE_DESERIALIZE_ARRAY_LENGTH.format(slots[i]))
-                    source.append(VALUE_DESERIALIZE_COMPLEX_ARRAY.format(slots[i], type[0]))
+                    source.append(VALUE_DESERIALIZE_COMPLEX_ARRAY.format(slots[i], typei[0], constructorOf(obj)))
             else: # Single Value
-                source.append(VALUE_DESERIALIZE_COMPLEX.format(type[0], slots[i]))
+                source.append(VALUE_DESERIALIZE_COMPLEX.format(typei[0], slots[i]))
 
     src = "\n".join(source)
     print(src)
