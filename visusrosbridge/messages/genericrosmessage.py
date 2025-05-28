@@ -137,7 +137,7 @@ VALUE_DESERIALIZE_PRIMITIVE_ARRAY = "value.{1} = msg.{0}Array()"
 VALUE_DESERIALIZE_ARRAY_LENGTH = "length = msg.readArrayLength()"
 VALUE_DESERIALIZE_COMPLEX = "exec(DESERIALIZERS['{0}'], {{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{1} }})"
 
-VALUE_DESERIALIZE_COMPLEX_ARRAY = "value.{0} = [{2}] * length\nfor j in range(length):\n    exec(DESERIALIZERS['{1}'], {{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
+VALUE_DESERIALIZE_COMPLEX_ARRAY = "for j in range(length):\n    value.{0}.append({2})\n    exec(DESERIALIZERS['{1}'], {{'DESERIALIZERS': DESERIALIZERS, 'msg': msg, 'value': value.{0}[j]}})"
 
 
 def findInstanceOf(msg, slot, msgTypeStr):
